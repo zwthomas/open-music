@@ -2,7 +2,7 @@ FROM node:16
 
 WORKDIR /usr/src/app
 
-RUN git clone https://github.com/zwthomas/Open-Voice.git .
+RUN git clone https://github.com/zwthomas/open-music.git .
 RUN npm install
 
 
