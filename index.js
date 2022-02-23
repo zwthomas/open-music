@@ -1,17 +1,21 @@
 const { Client, Intents } = require('discord.js');
 const { token } = require('./config.json');
 const ytdl = require('ytdl-core');
+const ytsr = require('ytsr');
 
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, getVoiceConnection, AudioPlayerStatus, VoiceConnectionStatus } = require('@discordjs/voice');
+let baseLog = ""
+
+function log(message) {
+  return new Date().toUTCString() + " | " + message;
+}
 
 async function playSong(url, interaction) {
-  console.log(url)
   const songInfo = await ytdl.getInfo(url);
   const song = {
     title: songInfo.videoDetails.title,
     url: songInfo.videoDetails.video_url,
   };
-  console.log(song)
 
   connection = joinVoiceChannel({
     channelId: interaction.member.voice.channel.id,
@@ -21,27 +25,18 @@ async function playSong(url, interaction) {
 
   connection.on(VoiceConnectionStatus.Disconnected, async (oldState, newState) => {
     connection.destroy();
-    // try {
-    //   await Promise.race([
-    //     entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
-    //     entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
-    //   ]);
-    //   // Seems to be reconnecting to a new channel - ignore disconnect
-    // } catch (error) {
-    //   // Seems to be a real disconnect which SHOULDN'T be recovered from
-      
-    // }
   });
 
   const player = createAudioPlayer();
   const stream = ytdl(url, { filter: 'audioonly' });
-  console.log("test")
-  // const holder = await ytdl("https://m.youtube.com/watch?v=RJS3u3rEPys")
   const resource = createAudioResource(stream);
   player.play(resource);
   connection.subscribe(player);
   serverPlayer[interaction.member.voice.channel.guild.id] = player
-  serverQueues[interaction.member.voice.channel.guild.id] = []
+  if (!serverQueues[interaction.member.voice.channel.guild.id]) {
+    serverQueues[interaction.member.voice.channel.guild.id] = []
+  }
+  console.log(log(baseLog + " | Queue Size: " + serverQueues[interaction.member.voice.channel.guild.id].length + " | Playing: " + url))
   player.on(AudioPlayerStatus.Idle, () => {
     let nextURL = serverQueues[interaction.member.voice.channel.guild.id].shift()
     if (!nextURL) {
@@ -86,7 +81,7 @@ const serverPlayer = {}
 
 // When the client is ready, run this code (only once)
 client.once('ready', () => {
-	console.log('Ready!');
+	console.log(log('Ready!'));
 });
 
 client.on('interactionCreate', async interaction => {
@@ -94,19 +89,46 @@ client.on('interactionCreate', async interaction => {
 
 	const { commandName } = interaction;
 
+  let guild = interaction.guild.name
+  let displayName = interaction.member.displayName
+  let username = interaction.member.user.username
+  baseLog = "Guild: " + guild + " | Username: " + username + " | Display Name: " + displayName
+
+  if (!interaction.member.voice.channel) {
+    console.log(log(baseLog + " | Command: " + commandName + " | ERROR: " + "Must be in voice channel"))
+    await interaction.reply('Must be in voice channel');
+    return
+  }
+
 	if (commandName === 'play') {
-    if (!interaction.member.voice.channel) {
-      await interaction.reply('Must be in voice channel');
+    let url = interaction.options.getString('url');
+    let search = interaction.options.getString('search');
+    if (!url && search) {
+      let options = {
+        limit: 1,
+        safeSearch: true
+      }
+      let results = await ytsr(search, options)
+      console.log(results)
+      if (results.items.length > 0) {
+        console.log(results.items[0].url)
+        url = results.items[0].url
+      }
+      console.log(log(baseLog + " | Command: " + commandName + " | Search: " + search + " | Result: " + url))
+    } else if (url) {
+      console.log(log(baseLog + " | Command: " + commandName + " | URL: " + url))
+    }
+    if (!url) {
+      console.log(log(baseLog + " | Command: " + commandName + " | ERROR: " + "Options Required"))
+      await interaction.reply('Options Required');
       return
     }
-    let url = interaction.options.getString('url');
     let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
     if (connection) {
       serverQueues[interaction.member.voice.channel.guild.id].push(url)
-      console.log(serverQueues[interaction.member.voice.channel.guild.id])
+      console.log(log(baseLog + " | Command: " + commandName + " | Queue Size: " + serverQueues[interaction.member.voice.channel.guild.id].length + " | Added: " + url))
       await interaction.reply('Added to queue: ' + url);
     } else {
-      console.log("create new")
       playSong(url, interaction)
       await interaction.reply('Playing: ' + url);
       
