@@ -5,6 +5,7 @@ const ytsr = require('ytsr');
 
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, getVoiceConnection, AudioPlayerStatus, VoiceConnectionStatus } = require('@discordjs/voice');
 let baseLog = ""
+let botID = "915010399424880680"
 
 function log(message) {
   return new Date().toUTCString() + " | " + message;
@@ -45,7 +46,6 @@ async function playSong(url, interaction) {
       connection.destroy()
       return
     }
-    console.log(nextURL)
     const stream = ytdl(nextURL, { filter: 'audioonly' });
     const resource = createAudioResource(stream);
     player.play(resource);
@@ -105,14 +105,19 @@ client.on('interactionCreate', async interaction => {
     let search = interaction.options.getString('search');
     if (!url && search) {
       let options = {
-        limit: 1,
+        limit: 20,
         safeSearch: true
       }
-      let results = await ytsr(search, options)
-      console.log(results)
+      const filters1 = await ytsr.getFilters(search);
+      const filter1 = filters1.get('Type').get('Video');
+      let results = await ytsr(filter1.url, options)
       if (results.items.length > 0) {
-        console.log(results.items[0].url)
-        url = results.items[0].url
+        for (let ndx = 0; ndx < results.items.length; ndx++) {
+          if (results.items[ndx].type != "movie") {
+            url = results.items[ndx].url
+            break;
+          }
+        }
       }
       console.log(log(baseLog + " | Command: " + commandName + " | Search: " + search + " | Result: " + url))
     } else if (url) {
@@ -135,6 +140,7 @@ client.on('interactionCreate', async interaction => {
     }
 		
 	} else if (commandName === 'skip') {
+    console.log(log(baseLog + " | Command: " + commandName))
     let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
     if (connection) {
       let player = serverPlayer[interaction.member.voice.channel.guild.id]
@@ -143,9 +149,9 @@ client.on('interactionCreate', async interaction => {
         player.stop()
         let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
         connection.destroy()
+        await interaction.reply('Queue Empty');
         return
       }
-      console.log(nextURL)
       await interaction.reply('Playing: ' + nextURL);
       const stream = ytdl(nextURL, { filter: 'audioonly' });
       const resource = createAudioResource(stream);
@@ -156,12 +162,14 @@ client.on('interactionCreate', async interaction => {
     
 
   } else if (commandName === 'stop') {
+    console.log(log(baseLog + " | Command: " + commandName))
     let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
     if (connection) {
       let player = serverPlayer[interaction.member.voice.channel.guild.id]
       player.stop()
       let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
       connection.destroy()
+      serverQueues[interaction.member.voice.channel.guild.id] = null
       await interaction.reply('Stopped');
     } else {
       await interaction.reply('Not Playing');
@@ -169,6 +177,7 @@ client.on('interactionCreate', async interaction => {
     
 
   } else if (commandName === 'queue') {
+    console.log(log(baseLog + " | Command: " + commandName))
     let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
     if (connection) {
       let queue = serverQueues[interaction.member.voice.channel.guild.id]
@@ -185,6 +194,20 @@ client.on('interactionCreate', async interaction => {
 
   }
 });
+
+client.on("voiceStateUpdate", async (oldState, newState) => {
+  if (oldState.channelId && oldState.channel.members.size === 1 && oldState.channel.members.get(botID)) {
+    console.log(log("Guild: " + oldState.guild.name + " | " + "No listeners remaining in channel"))  
+    let connection = getVoiceConnection(oldState.guild.id)
+    if (connection) {
+      let player = serverPlayer[oldState.guild.id]
+      player.stop()
+      connection.destroy()
+    } 
+  }
+
+
+})
 
 // Login to Discord with your client's token
 client.login(token);
