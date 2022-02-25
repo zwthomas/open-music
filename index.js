@@ -1,4 +1,4 @@
-const { Client, Intents } = require('discord.js');
+const { Client, Intents, VoiceRegion } = require('discord.js');
 const { token } = require('./config.json');
 const ytdl = require('ytdl-core');
 const ytsr = require('ytsr');
@@ -57,7 +57,9 @@ async function playSong(url, interaction) {
     if (!nextURL) {
       player.stop()
       let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
-      connection.destroy()
+      if (connection) {
+        connection.destroy()
+      }
       return
     }
     console.log(nextURL)
@@ -86,6 +88,10 @@ client.once('ready', () => {
 
 client.on('interactionCreate', async interaction => {
 	if (!interaction.isCommand()) return;
+  await interaction.reply('Working on it...');
+  let voiceStates = interaction.guild.voiceStates
+  console.log(client.application.id)
+
 
 	const { commandName } = interaction;
 
@@ -96,16 +102,24 @@ client.on('interactionCreate', async interaction => {
 
   if (!interaction.member.voice.channel) {
     console.log(log(baseLog + " | Command: " + commandName + " | ERROR: " + "Must be in voice channel"))
-    await interaction.reply('Must be in voice channel');
+    await interaction.editReply('Must be in voice channel');
     return
   }
+
+  let membersInChannel = interaction.member.voice.channel.members
+  let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
+  if (connection && !membersInChannel.get(client.application.id)) {
+    console.log(log(baseLog + " | Command: " + commandName + " | ERROR: " + "Not in Channel with bot"))
+    await interaction.editReply('Not in Channel with bot');
+    return
+  } 
 
 	if (commandName === 'play') {
     let url = interaction.options.getString('url');
     let search = interaction.options.getString('search');
     if (!url && search) {
       let options = {
-        limit: 20,
+        limit: 10,
         safeSearch: true
       }
       const filters1 = await ytsr.getFilters(search);
@@ -125,60 +139,55 @@ client.on('interactionCreate', async interaction => {
     }
     if (!url) {
       console.log(log(baseLog + " | Command: " + commandName + " | ERROR: " + "Options Required"))
-      await interaction.reply('Options Required');
+      await interaction.editReply('Options Required');
       return
     }
-    let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
+    
     if (connection) {
       serverQueues[interaction.member.voice.channel.guild.id].push(url)
       console.log(log(baseLog + " | Command: " + commandName + " | Queue Size: " + serverQueues[interaction.member.voice.channel.guild.id].length + " | Added: " + url))
-      await interaction.reply('Added to queue: ' + url);
+      await interaction.editReply('Added to queue: ' + url);
     } else {
       playSong(url, interaction)
-      await interaction.reply('Playing: ' + url);
+      await interaction.editReply('Playing: ' + url);
       
     }
 		
 	} else if (commandName === 'skip') {
     console.log(log(baseLog + " | Command: " + commandName))
-    let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
     if (connection) {
       let player = serverPlayer[interaction.member.voice.channel.guild.id]
       let nextURL = serverQueues[interaction.member.voice.channel.guild.id].shift()
       if (!nextURL) {
         player.stop()
-        let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
         connection.destroy()
-        await interaction.reply('Queue Empty');
+        await interaction.editReply('Queue Empty');
         return
       }
-      await interaction.reply('Playing: ' + nextURL);
+      await interaction.editReply('Playing: ' + nextURL);
       const stream = ytdl(nextURL, { filter: 'audioonly' });
       const resource = createAudioResource(stream);
       player.play(resource);
     } else {
-      await interaction.reply('Not Playing');
+      await interaction.editReply('Not Playing');
     }
     
 
   } else if (commandName === 'stop') {
     console.log(log(baseLog + " | Command: " + commandName))
-    let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
     if (connection) {
       let player = serverPlayer[interaction.member.voice.channel.guild.id]
       player.stop()
-      let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
       connection.destroy()
       serverQueues[interaction.member.voice.channel.guild.id] = null
-      await interaction.reply('Stopped');
+      await interaction.editReply('Stopped');
     } else {
-      await interaction.reply('Not Playing');
+      await interaction.editReply('Not Playing');
     }
     
 
   } else if (commandName === 'queue') {
     console.log(log(baseLog + " | Command: " + commandName))
-    let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
     if (connection) {
       let queue = serverQueues[interaction.member.voice.channel.guild.id]
       let names = []
@@ -186,9 +195,9 @@ client.on('interactionCreate', async interaction => {
         let songInfo = await ytdl.getInfo(queue[i]);
         names.push(songInfo.videoDetails.title)
       }
-      await interaction.reply('Queue: ' + String(names));
+      await interaction.editReply('Queue: ' + String(names));
     } else {
-      await interaction.reply('No queue');
+      await interaction.editReply('No queue');
     }
     
 
