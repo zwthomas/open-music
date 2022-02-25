@@ -144,6 +144,11 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply('Options Required');
       return
     }
+    if (!ytdl.validateURL(url)) {
+      console.log(log(baseLog + " | Command: " + commandName + " | ERROR: " + "Bad URL"))
+      await interaction.editReply('Bad Url');
+      return
+    }
     
     if (connection) {
       serverQueues[interaction.member.voice.channel.guild.id].push(url)
