@@ -43,7 +43,9 @@ async function playSong(url, interaction) {
     if (!nextURL) {
       player.stop()
       let connection = getVoiceConnection(interaction.member.voice.channel.guild.id);
-      connection.destroy()
+      if (connection) {
+        connection.destroy()
+      }
       return
     }
     const stream = ytdl(nextURL, { filter: 'audioonly' });
